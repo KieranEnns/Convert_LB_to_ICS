@@ -1,0 +1,15 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+
+.venv/
+venv/
+env/
+
+.idea/
+
+*.ics
+*.pdf
+
+/tmp/
+*.log
