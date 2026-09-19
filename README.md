@@ -9,6 +9,23 @@ events are positioned under Sunday-Saturday columns.
 
 ## Web App
 
+## Download The Ready-To-Use Mac App
+
+The easiest option for non-technical users is the packaged macOS app from
+GitHub Releases:
+
+1. Open the repository's **Releases** page.
+2. Download `LB-to-ICS-Converter-macOS.zip`.
+3. Unzip it.
+4. Double-click `LB to ICS Converter.app`.
+5. If macOS blocks it because it is unsigned, right-click the app, choose
+   **Open**, then confirm.
+
+The app opens your browser to the local converter. No Terminal commands or
+Python package installation are needed for this packaged version.
+
+## Run From Source
+
 Start the local web app:
 
 ```bash
@@ -105,7 +122,7 @@ python3 -m pip install -r requirements.txt
 
 ## Download From GitHub
 
-For users who are not using Git:
+For users who want to run from source instead of the packaged app:
 
 1. Open the GitHub repository page.
 2. Click **Code**.
@@ -124,6 +141,23 @@ cd REPOSITORY_FOLDER
 python3 -m pip install -r requirements.txt
 python3 web_app.py
 ```
+
+## Build A macOS Release
+
+Maintainers can build the no-Terminal macOS app with:
+
+```bash
+./scripts/build_macos_app.sh
+```
+
+This creates:
+
+```text
+LB-to-ICS-Converter-macOS.zip
+```
+
+Upload that ZIP file to a GitHub Release so users can download and run the app
+without installing Python packages manually.
 
 ## Local Web App Safeguards
 

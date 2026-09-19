@@ -10,6 +10,11 @@ env/
 
 *.ics
 *.pdf
+*.zip
 
 /tmp/
 *.log
+
+build/
+dist/
+*.spec
