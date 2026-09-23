@@ -4,7 +4,14 @@ from io import BytesIO
 
 from main import CalendarEvent, events_to_ics, parse_events
 from app import app as flask_app
-from web_app import ReviewSession, infer_default_year_from_calendar_text, selected_events_from_form, validate_timezone
+from web_app import (
+    ReviewSession,
+    first_field,
+    form_from_request,
+    infer_default_year_from_calendar_text,
+    selected_events_from_form,
+    validate_timezone,
+)
 
 
 GRID_COLUMNS = [0, 32, 64, 96, 129, 161, 193]
@@ -26,6 +33,12 @@ class FakeForm:
 
     def getfirst(self, key, default=None):
         return self.values.get(key, default)
+
+
+class FakeRequest:
+    def __init__(self, content_type, body):
+        self.headers = {"Content-Type": content_type}
+        self.rfile = BytesIO(body)
 
 
 class CalendarPdfImporterTests(unittest.TestCase):
@@ -209,6 +222,28 @@ class CalendarPdfImporterTests(unittest.TestCase):
         self.assertEqual(events[0].start_time.isoformat(), "08:30:00")
         self.assertEqual(events[0].end_time.isoformat(), "17:15:00")
         self.assertEqual(events[0].location, "Ward")
+
+    def test_local_form_parser_reads_multipart_uploads(self):
+        boundary = "test-boundary"
+        body = (
+            b"--test-boundary\r\n"
+            b'Content-Disposition: form-data; name="timezone"\r\n\r\n'
+            b"America/Winnipeg\r\n"
+            b"--test-boundary\r\n"
+            b'Content-Disposition: form-data; name="pdf"; filename="schedule.pdf"\r\n'
+            b"Content-Type: application/pdf\r\n\r\n"
+            b"%PDF-1.4\ncalendar\r\n"
+            b"--test-boundary--\r\n"
+        )
+        request = FakeRequest(f"multipart/form-data; boundary={boundary}", body)
+
+        form = form_from_request(request, len(body))
+        upload = first_field(form["pdf"])
+
+        self.assertEqual(form.getfirst("timezone"), "America/Winnipeg")
+        self.assertIsNotNone(upload)
+        self.assertEqual(upload.filename, "schedule.pdf")
+        self.assertEqual(upload.file.read(), b"%PDF-1.4\ncalendar")
 
     def test_timezone_validation_rejects_invalid_names(self):
         self.assertEqual(validate_timezone("America/Winnipeg"), "America/Winnipeg")

@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import argparse
-import cgi
+import io
 import html
 import re
 import secrets
@@ -14,10 +14,12 @@ import time
 import urllib.parse
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from email import policy
+from email.parser import BytesParser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Union
+from typing import BinaryIO, Dict, Iterable, List, Optional, Protocol, Union
 
 from main import CalendarEvent, events_to_ics, extract_pdf_text, find_calendar_date_range, parse_events
 
@@ -44,6 +46,44 @@ class ReviewSession:
     calendar_name: str
     timezone_id: Optional[str]
     date_range_label: str
+
+
+@dataclass
+class UploadedFile:
+    filename: str
+    file: BinaryIO
+
+
+FormValue = Union[str, UploadedFile]
+
+
+class FormReader(Protocol):
+    def getfirst(self, key: str, default: Optional[str] = None) -> Optional[str]:
+        ...
+
+
+class FormData:
+    def __init__(self) -> None:
+        self._fields: Dict[str, List[FormValue]] = {}
+
+    def add_text(self, name: str, value: str) -> None:
+        self._fields.setdefault(name, []).append(value)
+
+    def add_file(self, name: str, filename: str, content: bytes) -> None:
+        self._fields.setdefault(name, []).append(UploadedFile(filename=filename, file=io.BytesIO(content)))
+
+    def getfirst(self, key: str, default: Optional[str] = None) -> Optional[str]:
+        for value in self._fields.get(key, []):
+            if isinstance(value, str):
+                return value
+        return default
+
+    def __contains__(self, key: str) -> bool:
+        return key in self._fields
+
+    def __getitem__(self, key: str) -> Union[FormValue, List[FormValue]]:
+        values = self._fields[key]
+        return values if len(values) > 1 else values[0]
 
 
 SESSIONS: Dict[str, ReviewSession] = {}
@@ -361,10 +401,10 @@ def parse_int(value: object, fallback: int, minimum: int, maximum: int) -> int:
     return min(max(parsed, minimum), maximum)
 
 
-def first_field(value: Union[cgi.FieldStorage, List[cgi.FieldStorage], None]) -> Optional[cgi.FieldStorage]:
+def first_field(value: Union[FormValue, List[FormValue], None]) -> Optional[UploadedFile]:
     if isinstance(value, list):
-        return value[0] if value else None
-    return value
+        value = value[0] if value else None
+    return value if isinstance(value, UploadedFile) else None
 
 
 def validate_timezone(value: str) -> str:
@@ -496,7 +536,7 @@ def parse_time_value(value: str) -> Optional[datetime.time]:
         return None
 
 
-def selected_events_from_form(form: cgi.FieldStorage, session: ReviewSession) -> List[CalendarEvent]:
+def selected_events_from_form(form: FormReader, session: ReviewSession) -> List[CalendarEvent]:
     selected: List[CalendarEvent] = []
     for index, original in enumerate(session.events):
         if not form.getfirst(f"include_{index}"):
@@ -549,16 +589,44 @@ def selected_events_from_form(form: cgi.FieldStorage, session: ReviewSession) ->
     return selected
 
 
-def form_from_request(handler: BaseHTTPRequestHandler, content_length: int) -> cgi.FieldStorage:
-    return cgi.FieldStorage(
-        fp=handler.rfile,
-        headers=handler.headers,
-        environ={
-            "REQUEST_METHOD": "POST",
-            "CONTENT_TYPE": handler.headers.get("Content-Type", ""),
-            "CONTENT_LENGTH": str(content_length),
-        },
+def form_from_request(handler: BaseHTTPRequestHandler, content_length: int) -> FormData:
+    content_type = handler.headers.get("Content-Type", "")
+    body = handler.rfile.read(content_length)
+    form = FormData()
+
+    if content_type.startswith("application/x-www-form-urlencoded"):
+        fields = urllib.parse.parse_qs(body.decode("utf-8", "replace"), keep_blank_values=True)
+        for name, values in fields.items():
+            for value in values:
+                form.add_text(name, value)
+        return form
+
+    if not content_type.startswith("multipart/form-data"):
+        return form
+
+    message = BytesParser(policy=policy.default).parsebytes(
+        f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode("utf-8") + body
     )
+    if not message.is_multipart():
+        return form
+
+    for part in message.iter_parts():
+        if part.get_content_disposition() != "form-data":
+            continue
+
+        name = part.get_param("name", header="content-disposition")
+        if not name:
+            continue
+
+        payload = part.get_payload(decode=True) or b""
+        filename = part.get_filename()
+        if filename is None:
+            charset = part.get_content_charset() or "utf-8"
+            form.add_text(name, payload.decode(charset, "replace"))
+        else:
+            form.add_file(name, filename, payload)
+
+    return form
 
 
 def render_page(
