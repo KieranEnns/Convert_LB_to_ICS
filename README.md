@@ -9,6 +9,31 @@ events are positioned under Sunday-Saturday columns.
 
 ## Web App
 
+## Deploy As A Website
+
+This project includes a deployable Flask website in `app.py`.
+
+One straightforward hosting path is Render:
+
+1. Push this repository to GitHub.
+2. Open Render and create a new **Web Service** from the GitHub repository.
+3. Use:
+
+```text
+Build Command: python -m pip install -r requirements.txt
+Start Command: gunicorn app:app --bind 0.0.0.0:$PORT
+```
+
+4. Deploy the service.
+5. Open the public URL Render gives you.
+
+The included `render.yaml` contains the same build/start commands for Blueprint
+deployments.
+
+Important privacy note: once deployed as a public website, uploaded PDFs are
+processed on the hosted server. Do not treat it like the old local-only app
+unless you control the deployment and trust the host.
+
 ## Download The Ready-To-Use Mac App
 
 The easiest option for non-technical users is the packaged macOS app from

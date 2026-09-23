@@ -682,7 +682,7 @@ def render_page(
           <button type="submit">{svg_icon("upload")}Convert PDF</button>
         </div>
       </form>
-      <p class="meta">PDFs are processed locally. Uploaded files are deleted after parsing; review sessions expire after 30 minutes.</p>
+      <p class="meta">Uploaded PDFs are deleted after parsing; review sessions expire after 30 minutes.</p>
     </section>
     {result_html}
   </div>

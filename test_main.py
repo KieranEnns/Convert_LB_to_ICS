@@ -1,7 +1,9 @@
 import unittest
 from datetime import date, time
+from io import BytesIO
 
 from main import CalendarEvent, events_to_ics, parse_events
+from app import app as flask_app
 from web_app import ReviewSession, infer_default_year_from_calendar_text, selected_events_from_form, validate_timezone
 
 
@@ -27,6 +29,35 @@ class FakeForm:
 
 
 class CalendarPdfImporterTests(unittest.TestCase):
+    def test_flask_home_and_health_routes(self):
+        flask_app.config["TESTING"] = True
+        client = flask_app.test_client()
+
+        home = client.get("/")
+        health = client.get("/healthz")
+
+        self.assertEqual(home.status_code, 200)
+        self.assertIn(b"Calendar PDF to ICS", home.data)
+        self.assertEqual(health.status_code, 200)
+        self.assertEqual(health.data, b"ok\n")
+
+    def test_flask_rejects_non_pdf_upload(self):
+        flask_app.config["TESTING"] = True
+        client = flask_app.test_client()
+
+        response = client.post(
+            "/convert",
+            data={
+                "pdf": (BytesIO(b"not a pdf"), "not-a-pdf.txt"),
+                "timezone": "America/Winnipeg",
+                "default_duration": "60",
+            },
+            content_type="multipart/form-data",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(b"must be a PDF", response.data)
+
     def test_parses_date_heading_timed_event_and_details(self):
         text = """
         Monday, September 14, 2026
